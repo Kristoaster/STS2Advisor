@@ -3,7 +3,9 @@ using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Modding;
@@ -120,6 +122,8 @@ public static class STS2AdvisorMod
                 foreach (var _ in player.PlayerCombatState.Hand.Cards)
                     handCount++;
 
+                var recommendation = BuildBasicCombatRecommendation(player);
+
                 var sb = new StringBuilder();
                 sb.AppendLine("Advisor");
                 sb.AppendLine(
@@ -127,7 +131,8 @@ public static class STS2AdvisorMod
                     $"HP {player.Creature.CurrentHp}/{player.Creature.MaxHp} | " +
                     $"Block {player.Creature.Block}"
                 );
-                sb.Append($"Hand {handCount} | Enemies {livingEnemies}");
+                sb.AppendLine($"Hand {handCount} | Enemies {livingEnemies}");
+                sb.Append(recommendation);
 
                 _label.Text = sb.ToString();
                 return;
@@ -139,6 +144,69 @@ public static class STS2AdvisorMod
         {
             _label.Text = $"Advisor\nError: {ex.GetType().Name}";
             Log.Warn($"STS2 Advisor refresh failed: {ex}");
+        }
+    }
+    
+    private static string BuildBasicCombatRecommendation(MegaCrit.Sts2.Core.Entities.Players.Player player)
+    {
+        var combatState = player.PlayerCombatState;
+        if (combatState == null)
+            return "Recommendation: State unavailable";
+
+        if (combatState.Energy <= 0)
+            return "Recommendation: End turn";
+
+        CardModel? bestAttack = null;
+        int bestAttackScore = int.MinValue;
+
+        CardModel? bestSkill = null;
+        int bestSkillScore = int.MinValue;
+
+        foreach (var card in combatState.Hand.Cards)
+        {
+            card.CanPlay(out var unplayableReason, out _);
+            if (unplayableReason != UnplayableReason.None)
+                continue;
+
+            int score = GetSimpleCardScore(card);
+
+            if (card.Type == CardType.Attack && score > bestAttackScore)
+            {
+                bestAttack = card;
+                bestAttackScore = score;
+            }
+            else if (card.Type == CardType.Skill && score > bestSkillScore)
+            {
+                bestSkill = card;
+                bestSkillScore = score;
+            }
+        }
+
+        if (bestAttack != null)
+            return $"Recommendation: Play {GetCardDisplayName(bestAttack)}";
+
+        if (bestSkill != null)
+            return $"Recommendation: Play {GetCardDisplayName(bestSkill)}";
+
+        return "Recommendation: End turn";
+    }
+
+    private static int GetSimpleCardScore(CardModel card)
+    {
+        int energyScore = card.EnergyCost.CostsX ? 50 : card.EnergyCost.GetAmountToSpend() * 10;
+        int upgradedBonus = card.IsUpgraded ? 2 : 0;
+        return energyScore + upgradedBonus;
+    }
+
+    private static string GetCardDisplayName(CardModel card)
+    {
+        try
+        {
+            return card.Id.Entry;
+        }
+        catch
+        {
+            return "card";
         }
     }
 
