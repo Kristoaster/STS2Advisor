@@ -17,30 +17,15 @@ public static class STS2AdvisorMod
         var harmony = new Harmony("sts2advisor.patch");
         harmony.PatchAll();
 
-        TryCreateOverlay();
-    }
-
-    private static void TryCreateOverlay()
-    {
         if (Engine.GetMainLoop() is not SceneTree tree)
         {
-            Log.Warn("STS2 Advisor: SceneTree not ready, overlay not created yet.");
+            Log.Warn("STS2 Advisor: SceneTree not ready.");
             return;
         }
 
-        var existing = tree.Root.GetNodeOrNull<AdvisorOverlay>("STS2AdvisorOverlay");
-        if (existing != null)
-        {
-            _overlay = existing;
-            return;
-        }
-
-        _overlay = new AdvisorOverlay
-        {
-            Name = "STS2AdvisorOverlay"
-        };
-
+        _overlay = new AdvisorOverlay();
         tree.Root.CallDeferred(Node.MethodName.AddChild, _overlay);
+        Log.Warn("STS2 Advisor: overlay queued");
     }
 
     public static void SetOverlayText(string text)
