@@ -8,7 +8,8 @@ namespace STS2Advisor;
 [ModInitializer("Initialize")]
 public static class STS2AdvisorMod
 {
-    private static AdvisorOverlay? _overlay;
+    private static CanvasLayer? _layer;
+    private static Label? _label;
 
     public static void Initialize()
     {
@@ -23,13 +24,40 @@ public static class STS2AdvisorMod
             return;
         }
 
-        _overlay = new AdvisorOverlay();
-        tree.Root.CallDeferred(Node.MethodName.AddChild, _overlay);
-        Log.Warn("STS2 Advisor: overlay queued");
+        tree.Root.CallDeferred(Node.MethodName.AddChild, BuildOverlay());
+        Log.Warn("STS2 Advisor: built-in overlay queued");
+    }
+
+    private static CanvasLayer BuildOverlay()
+    {
+        _layer = new CanvasLayer();
+        _layer.Layer = 100;
+
+        var panel = new PanelContainer();
+        panel.Position = new Vector2(20, 20);
+        panel.CustomMinimumSize = new Vector2(420, 80);
+
+        var margin = new MarginContainer();
+        margin.AddThemeConstantOverride("margin_left", 12);
+        margin.AddThemeConstantOverride("margin_top", 10);
+        margin.AddThemeConstantOverride("margin_right", 12);
+        margin.AddThemeConstantOverride("margin_bottom", 10);
+
+        _label = new Label();
+        _label.Text = "Advisor: built-in node test";
+        _label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+
+        margin.AddChild(_label);
+        panel.AddChild(margin);
+        _layer.AddChild(panel);
+
+        Log.Warn("STS2 Advisor: built-in overlay constructed");
+        return _layer;
     }
 
     public static void SetOverlayText(string text)
     {
-        _overlay?.SetRecommendation(text);
+        if (_label != null)
+            _label.Text = text;
     }
 }
