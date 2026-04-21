@@ -1,6 +1,11 @@
+using System.Text;
 using Godot;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Modding;
 
 namespace STS2Advisor;
@@ -10,6 +15,7 @@ public static class STS2AdvisorMod
 {
     private static CanvasLayer? _layer;
     private static Label? _label;
+    private static Godot.Timer? _refreshTimer;
 
     public static void Initialize()
     {
@@ -25,7 +31,9 @@ public static class STS2AdvisorMod
         }
 
         tree.Root.CallDeferred(Node.MethodName.AddChild, BuildOverlay());
-        Log.Warn("STS2 Advisor: built-in overlay queued");
+        tree.Root.CallDeferred(Node.MethodName.AddChild, BuildRefreshTimer());
+
+        Log.Warn("STS2 Advisor: overlay + timer queued");
     }
 
     private static CanvasLayer BuildOverlay()
@@ -35,7 +43,7 @@ public static class STS2AdvisorMod
 
         var panel = new PanelContainer();
         panel.Position = new Vector2(20, 20);
-        panel.CustomMinimumSize = new Vector2(420, 80);
+        panel.CustomMinimumSize = new Vector2(560, 110);
 
         var margin = new MarginContainer();
         margin.AddThemeConstantOverride("margin_left", 12);
@@ -44,7 +52,7 @@ public static class STS2AdvisorMod
         margin.AddThemeConstantOverride("margin_bottom", 10);
 
         _label = new Label();
-        _label.Text = "Advisor: built-in node test";
+        _label.Text = "Advisor: starting...";
         _label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 
         margin.AddChild(_label);
@@ -53,6 +61,85 @@ public static class STS2AdvisorMod
 
         Log.Warn("STS2 Advisor: built-in overlay constructed");
         return _layer;
+    }
+
+    private static Godot.Timer BuildRefreshTimer()
+    {
+        _refreshTimer = new Godot.Timer();
+        _refreshTimer.WaitTime = 0.25;
+        _refreshTimer.OneShot = false;
+        _refreshTimer.Autostart = true;
+        _refreshTimer.ProcessMode = Node.ProcessModeEnum.Always;
+        _refreshTimer.Timeout += RefreshOverlay;
+
+        Log.Warn("STS2 Advisor: refresh timer constructed");
+        return _refreshTimer;
+    }
+
+    private static void RefreshOverlay()
+    {
+        if (_label == null)
+            return;
+
+        try
+        {
+            if (!RunManager.Instance.IsInProgress)
+            {
+                _label.Text = "Advisor\nNo run in progress";
+                return;
+            }
+
+            var runState = RunManager.Instance.DebugOnlyGetState();
+            if (runState == null)
+            {
+                _label.Text = "Advisor\nRun state unavailable";
+                return;
+            }
+
+            var currentRoom = runState.CurrentRoom;
+
+            if (currentRoom is CombatRoom && CombatManager.Instance.IsInProgress)
+            {
+                var combatState = CombatManager.Instance.DebugOnlyGetState();
+                var player = LocalContext.GetMe(runState);
+
+                if (combatState == null || player == null || player.PlayerCombatState == null)
+                {
+                    _label.Text = "Advisor\nCombat active, but combat state is unavailable";
+                    return;
+                }
+
+                int livingEnemies = 0;
+                foreach (var enemy in combatState.Enemies)
+                {
+                    if (enemy.IsAlive)
+                        livingEnemies++;
+                }
+
+                int handCount = 0;
+                foreach (var _ in player.PlayerCombatState.Hand.Cards)
+                    handCount++;
+
+                var sb = new StringBuilder();
+                sb.AppendLine("Advisor");
+                sb.AppendLine(
+                    $"Combat | Energy {player.PlayerCombatState.Energy}/{player.PlayerCombatState.MaxEnergy} | " +
+                    $"HP {player.Creature.CurrentHp}/{player.Creature.MaxHp} | " +
+                    $"Block {player.Creature.Block}"
+                );
+                sb.Append($"Hand {handCount} | Enemies {livingEnemies}");
+
+                _label.Text = sb.ToString();
+                return;
+            }
+
+            _label.Text = $"Advisor\n{currentRoom?.GetType().Name ?? "Unknown room"}";
+        }
+        catch (System.Exception ex)
+        {
+            _label.Text = $"Advisor\nError: {ex.GetType().Name}";
+            Log.Warn($"STS2 Advisor refresh failed: {ex}");
+        }
     }
 
     public static void SetOverlayText(string text)
